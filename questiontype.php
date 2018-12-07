@@ -6,7 +6,7 @@
  * @author     Mannes Brak
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
- 
+
 /**
  * The BAClickToReveal question class
  */
@@ -32,12 +32,12 @@ class qtype_ubhotspots extends question_type {
             $OUTPUT->notification('Error: Missing question options for ubhotspots question'.$question->id.'!');
             return false;
         }
-        
+
         if (!$question->options->answers = $DB->get_records('question_answers', array('question' => $question->id))) {
             $OUTPUT->notification('Error: Missing question answers for ubhotspots question'.$question->id.'!');
            return false;
         }
-        
+
         return true;
     }
 
@@ -171,29 +171,29 @@ class qtype_ubhotspots extends question_type {
         //$answers = json_decode(stripslashes($question->hseditordata));
         $answers = json_decode($question->hseditordata);
         $result = new stdClass();
-        
-        foreach($answers as $key=>$a){            
+
+        foreach($answers as $key=>$a){
             if(!$a || !$a->draw || !$a->shape || !$a->text){
                 unset($answers[$key]);
             }
         }
-        
-        if(!$answers){        
+
+        if(!$answers){
             $result->notice = get_string("failedloadinganswers", "qtype_ubhotspots");
             return $result;
         }
-        
+
         if (!$oldanswers = $DB->get_records("question_answers", array("question" => $question->id), "id ASC")) {
             $oldanswers = array();
         }
-        
+
         // TODO - Javascript Interface for fractions in the editor
         $fraction = round(1 / count($answers), 2);
-        
-        foreach($answers as $a){            
-                         
+
+        foreach($answers as $a){
+
             if ($answer = array_shift($oldanswers)) {  // Existing answer, so reuse it
-                
+
                 $answer->answer     = addslashes(json_encode($a));
                 $answer->fraction   = $fraction;
                 $answer->feedback = '';
@@ -202,7 +202,7 @@ class qtype_ubhotspots extends question_type {
                     return $result;
                 }
             } else {
-                
+
                 unset($answer);
                 $answer = new stdClass();
                 $answer->answer   = addslashes(json_encode($a));
@@ -214,17 +214,17 @@ class qtype_ubhotspots extends question_type {
                     return $result;
                 }
             }
-            
+
         }
-        
-                
+
+
         // delete old answer records
         if (!empty($oldanswers)) {
             foreach($oldanswers as $oa) {
                 $DB->delete_records('question_answers', array('id' => $oa->id));
             }
         }
-        
+
         $update = true;
         $options = $DB->get_record("qtype_ubhotspots", array("question" => $question->id));
         if (!$options) {
@@ -232,11 +232,11 @@ class qtype_ubhotspots extends question_type {
             $options = new stdClass;
             $options->question = $question->id;
         }
-        
+
         $options->hseditordata = addslashes($question->hseditordata);
         $options->scrolltoresult = (int) isset($question->scrolltoresult);
         $options->highlightonhover = (int) isset($question->highlightonhover);
-        
+
         if ($update) {
             if (!$DB->update_record("qtype_ubhotspots", $options)) {
                 $result->error = "Could not update quiz ubhotspots options! (id=$options->id)";
@@ -247,7 +247,7 @@ class qtype_ubhotspots extends question_type {
                 $result->error = "Could not insert quiz ubhotspots options!";
                 return $result;
             }
-        }        
+        }
 
         return true;
     }
@@ -263,29 +263,29 @@ class qtype_ubhotspots extends question_type {
         $DB->delete_records("qtype_ubhotspots", array("question" => $questionid));
         return true;
     }
-    
-    
+
+
     function create_session_and_responses(&$question, &$state, $cmoptions, $attempt) {
         $state->responses = array();
         return true;
     }
 
     function restore_session_and_responses(&$question, &$state) {
-                        
+
         list($keys, $values) = explode(':',$state->responses['']);
         $state->responses = array_combine(explode(';',$keys),explode(';',$values));
-        
+
         return true;
     }
-    
+
     function save_session_and_responses(&$question, &$state) {
         global $DB;
         $responses = implode(';',array_keys($state->responses)).':';
         $responses .= implode(';', $state->responses);
-    
+
         return $DB->set_field('question_states', 'answer', $responses, array('id', $state->id));
-    }    
-    
+    }
+
     function print_question_formulation_and_controls(&$question, &$state, $cmoptions, $options) {
         global $CFG;
 
@@ -294,38 +294,38 @@ class qtype_ubhotspots extends question_type {
         // Print formulation
         $questiontext = $this->format_text($question->questiontext,$question->questiontextformat, $cmoptions);
         $image = get_question_image($question, $cmoptions->course);
-    
-        
+
+
         $isfinished = question_state_is_graded($state->last_graded) || $state->event == QUESTION_EVENTCLOSE;
         $feedback = '';
         if ($isfinished && $options->generalfeedback){
             $feedback = $this->format_text($question->generalfeedback, $question->questiontextformat, $cmoptions);
         }
-    
+
         $nameprefix = $question->name_prefix;
-        
+
         $imgfeedback = array();
-        
+
         if(($options->feedback || $options->correct_responses) && !empty($state->responses)){
             foreach ($state->responses as $key=>$response){
                 if(isset($question->options->answers[$key]))
-                    $imgfeedback[$key] = $this->check_coords($response,$question->options->answers[$key]->answer);                
+                    $imgfeedback[$key] = $this->check_coords($response,$question->options->answers[$key]->answer);
             }
         }
-                        
+
         include("$CFG->dirroot/question/type/ubhotspots/display.html");
-        
+
     }
-    
+
     function grade_responses(&$question, &$state, $cmoptions) {
         $state->raw_grade = 0;
-               
+
         foreach ($state->responses as $key=>$response) {
             if ($this->check_coords($response,$question->options->answers[$key]->answer)) {
                 $state->raw_grade += $question->options->answers[$key]->fraction;
             }
         }
-       
+
        // Make sure we don't assign negative or too high marks
         $state->raw_grade = min(max((float) $state->raw_grade, 0.0), 1.0) * $question->maxgrade;
 
@@ -337,7 +337,7 @@ class qtype_ubhotspots extends question_type {
 
         return true;
     }
-    
+
 
   /*  function get_all_responses(&$question, &$state) {
         $result = new stdClass;
@@ -350,7 +350,7 @@ class qtype_ubhotspots extends question_type {
         $responses = '';
         return $responses;
     } */
-    
+
     /**
      * Check if the user entered coords are inside the correct shape
      *
@@ -359,21 +359,21 @@ class qtype_ubhotspots extends question_type {
      * @return boolean to indicate success of failure.
      */
     function check_coords($response, $answer){
-                        
+
         if(!$response || !strpos($response,',')){
             return false;
-        }        
-        
+        }
+
         $answer = json_decode($answer);
         list($x,$y) = explode(',',$response);
-        
-        if($answer && $answer->shape){                        
-            
+
+        if($answer && $answer->shape){
+
             $s = $answer->shape;
             // Rectangle
             if($answer->shape->shape == 'rect'){
-                
-                if($x >= $s->startX && $x <= $s->endX && $y >= $s->startY && $y <= $s->endY){                    
+
+                if($x >= $s->startX && $x <= $s->endX && $y >= $s->startY && $y <= $s->endY){
                     return true;
                 }
             }
@@ -381,25 +381,25 @@ class qtype_ubhotspots extends question_type {
             else if($answer->shape->shape == 'ellip'){
                 $w = $s->endX - $s->startX;
                 $h = $s->endY - $s->startY;
-                                 
+
                 // Ellipse radius
                 $rx = $w / 2;
-                $ry = $h / 2; 
-        
+                $ry = $h / 2;
+
                 // Ellipse center
                 $cx = $s->startX + $rx;
                 $cy = $s->startY + $ry;
-                    
+
                 $dx = ($x - $cx) / $rx;
                 $dy = ($y - $cy) / $ry;
                 $distance = $dx * $dx + $dy * $dy;
-                
+
                 //if ((cuadrado(mouseX - cx)/cuadrado(w)) + (cuadrado(mouseY - cy)/cuadrado(h)) < 1)
                 if ($distance < 1.0){
                     return true;
                 }
-            }    
-        }        
+            }
+        }
         return false;
     }
 
@@ -449,7 +449,7 @@ class qtype_ubhotspots extends question_type {
             //Now, build the qtype_ubhotspots record structure
             $ubhotspot = new stdClass;
             $ubhotspot->question = $new_question_id;
-            $ubhotspot->hseditordata = backup_todb($mul_info['#']['HSEDITORDATA']['0']['#']);                      
+            $ubhotspot->hseditordata = backup_todb($mul_info['#']['HSEDITORDATA']['0']['#']);
 
             //The structure is equal to the db, so insert the question_shortanswer
             $newid = $DB->insert_record ("qtype_ubhotspots",$ubhotspot);
@@ -470,7 +470,7 @@ class qtype_ubhotspots extends question_type {
             }
         }
 
-        return $status;        
+        return $status;
     }
 
     public function actual_number_of_questions($question) {
