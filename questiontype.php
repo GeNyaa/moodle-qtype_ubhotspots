@@ -1,39 +1,163 @@
 <?php
 /**
- * The question type class for the ubhotspots question type.
+ * BAClickToReveal lib.php
  *
- * @copyright &copy; 2011 Universitat de Barcelona
- * @author <jleyva@cvaconsulting.com>
- * @license http://www.gnu.org/copyleft/gpl.html GNU Public License
- * @package ubhotspots
- *//** */
-
-require_once($CFG->libdir.'/pear/HTML/AJAX/JSON.php');
+ * @copyright  Bright Alley Knowledge and Learning
+ * @author     Mannes Brak
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
  
 /**
- * The ubhotspots question class
+ * The BAClickToReveal question class
  */
-class ubhotspots_qtype extends default_questiontype {
-
-    function name() {
-        return 'ubhotspots';
+class qtype_ubhotspots extends question_type {
+    public function is_real_question_type() {
+        return false;
     }
-    
-    /**
+
+    public function is_usable_by_random() {
+        return false;
+    }
+
+    public function can_analyse_responses() {
+        return false;
+    }
+
+   /**
      * @return boolean to indicate success of failure.
      */
-    function get_question_options(&$question) {
-        if (!$question->options = get_record('qtype_ubhotspots', 'question', $question->id)) {
-            notify('Error: Missing question options for ubhotspots question'.$question->id.'!');
+    function get_question_options($question) {
+        global $DB, $OUTPUT;
+        if (!$question->options = $DB->get_record('qtype_ubhotspots', array('question' => $question->id))) {
+            $OUTPUT->notification('Error: Missing question options for ubhotspots question'.$question->id.'!');
             return false;
         }
         
-        if (!$question->options->answers = get_records('question_answers', 'question', $question->id)) {
-           notify('Error: Missing question answers for ubhotspots question'.$question->id.'!');
+        if (!$question->options->answers = $DB->get_records('question_answers', array('question' => $question->id))) {
+            $OUTPUT->notification('Error: Missing question answers for ubhotspots question'.$question->id.'!');
            return false;
         }
         
         return true;
+    }
+
+    function save_question($question, $form) {
+        global $USER, $DB, $OUTPUT, $CFG;
+
+        list($question->category) = explode(',', $form->category);
+        $context = $this->get_context_by_category_id($question->category);
+
+        // This default implementation is suitable for most
+        // question types.
+
+        // First, save the basic question itself.
+        $question->name = trim($form->name);
+        $question->parent = isset($form->parent) ? $form->parent : 0;
+        $question->length = $this->actual_number_of_questions($question);
+        $question->penalty = isset($form->penalty) ? $form->penalty : 0;
+
+        // The trim call below has the effect of casting any strange values received,
+        // like null or false, to an appropriate string, so we only need to test for
+        // missing values. Be careful not to break the value '0' here.
+        if (!isset($form->questiontext['text'])) {
+            $question->questiontext = '';
+        } else {
+            $question->questiontext = trim($form->questiontext['text']);
+        }
+        $question->questiontextformat = !empty($form->questiontext['format']) ?
+            $form->questiontext['format'] : 0;
+
+        if (empty($form->generalfeedback['text'])) {
+            $question->generalfeedback = '';
+        } else {
+            $question->generalfeedback = trim($form->generalfeedback['text']);
+        }
+        $question->generalfeedbackformat = !empty($form->generalfeedback['format']) ?
+            $form->generalfeedback['format'] : 0;
+
+        if (empty($question->name)) {
+            $question->name = shorten_text(strip_tags($form->questiontext['text']), 15);
+            if (empty($question->name)) {
+                $question->name = '-';
+            }
+        }
+
+        if ($question->penalty > 1 or $question->penalty < 0) {
+            $question->errors['penalty'] = get_string('invalidpenalty', 'question');
+        }
+
+        $form->defaultmark = 0;
+        if (isset($form->defaultmark)) {
+            $question->defaultmark = $form->defaultmark;
+        }
+
+        // If the question is new, create it.
+        if (empty($question->id)) {
+            // Set the unique code.
+            $question->stamp = make_unique_id_code();
+            $question->createdby = $USER->id;
+            $question->timecreated = time();
+            $question->id = $DB->insert_record('question', $question);
+        }
+
+        // Now, whether we are updating a existing question, or creating a new
+        // one, we have to do the files processing and update the record.
+        // Question already exists, update.
+        $question->modifiedby = $USER->id;
+        $question->timemodified = time();
+
+        if (!empty($question->questiontext) && !empty($form->questiontext['itemid'])) {
+            $question->questiontext = file_save_draft_area_files($form->questiontext['itemid'],
+                $context->id, 'question', 'questiontext', (int)$question->id,
+                $this->fileoptions, $question->questiontext);
+        }
+        if (!empty($question->generalfeedback) && !empty($form->generalfeedback['itemid'])) {
+            $question->generalfeedback = file_save_draft_area_files(
+                $form->generalfeedback['itemid'], $context->id,
+                'question', 'generalfeedback', (int)$question->id,
+                $this->fileoptions, $question->generalfeedback);
+        }
+        $DB->update_record('question', $question);
+
+        // Now to save all the answers and type-specific options.
+        $form->id = $question->id;
+        $form->qtype = $question->qtype;
+        $form->category = $question->category;
+        $form->questiontext = $question->questiontext;
+        $form->questiontextformat = $question->questiontextformat;
+        // Current context.
+        $form->context = $context;
+
+        /*
+         * save the image
+         */
+        $draftitemid = file_get_submitted_draft_itemid('image');
+        file_save_draft_area_files($draftitemid, $context->id, 'qtype_ubhotspots', 'image',
+            $question->id, array('maxfiles' => 1,
+                'maxbytes' => $CFG->maxbytes,
+                'subdirs' => 0, 'accepted_types' => 'image'));
+
+
+        $result = $this->save_question_options($form);
+
+        if (!empty($result->error)) {
+            print_error($result->error);
+        }
+
+        if (!empty($result->notice)) {
+            notice($result->notice, "question.php?id=$question->id");
+        }
+
+        if (!empty($result->noticeyesno)) {
+            throw new coding_exception(
+                '$result->noticeyesno no longer supported in save_question.');
+        }
+
+        // Give the question a unique version stamp determined by question_hash().
+        $DB->set_field('question', 'version', question_hash($question),
+            array('id' => $question->id));
+
+        return $question;
     }
 
     /**
@@ -41,9 +165,12 @@ class ubhotspots_qtype extends default_questiontype {
      * @return boolean to indicate success of failure.
      */
     function save_question_options($question) {
-        
-        
-        $answers = json_decode(stripslashes($question->hseditordata));
+        global $DB;
+
+        // Changed answers check to no longer strip html from the editor box.
+        //$answers = json_decode(stripslashes($question->hseditordata));
+        $answers = json_decode($question->hseditordata);
+        $result = new stdClass();
         
         foreach($answers as $key=>$a){            
             if(!$a || !$a->draw || !$a->shape || !$a->text){
@@ -56,7 +183,7 @@ class ubhotspots_qtype extends default_questiontype {
             return $result;
         }
         
-        if (!$oldanswers = get_records("question_answers", "question",$question->id, "id ASC")) {
+        if (!$oldanswers = $DB->get_records("question_answers", array("question" => $question->id), "id ASC")) {
             $oldanswers = array();
         }
         
@@ -70,18 +197,19 @@ class ubhotspots_qtype extends default_questiontype {
                 $answer->answer     = addslashes(json_encode($a));
                 $answer->fraction   = $fraction;
                 $answer->feedback = '';
-                if (!update_record("question_answers", $answer)) {
+                if (!$DB->update_record("question_answers", $answer)) {
                     $result->error = "Could not update quiz answer! (id=$answer->id)";
                     return $result;
                 }
             } else {
                 
                 unset($answer);
+                $answer = new stdClass();
                 $answer->answer   = addslashes(json_encode($a));
                 $answer->question = $question->id;
                 $answer->fraction = $fraction;
                 $answer->feedback = '';
-                if (!$answer->id = insert_record("question_answers", $answer)) {
+                if (!$answer->id = $DB->insert_record("question_answers", $answer)) {
                     $result->error = "Could not insert quiz answer! ";
                     return $result;
                 }
@@ -93,12 +221,12 @@ class ubhotspots_qtype extends default_questiontype {
         // delete old answer records
         if (!empty($oldanswers)) {
             foreach($oldanswers as $oa) {
-                delete_records('question_answers', 'id', $oa->id);
+                $DB->delete_records('question_answers', array('id' => $oa->id));
             }
         }
         
         $update = true;
-        $options = get_record("qtype_ubhotspots", "question", $question->id);
+        $options = $DB->get_record("qtype_ubhotspots", array("question" => $question->id));
         if (!$options) {
             $update = false;
             $options = new stdClass;
@@ -106,14 +234,16 @@ class ubhotspots_qtype extends default_questiontype {
         }
         
         $options->hseditordata = addslashes($question->hseditordata);
+        $options->scrolltoresult = (int) isset($question->scrolltoresult);
+        $options->highlightonhover = (int) isset($question->highlightonhover);
         
         if ($update) {
-            if (!update_record("qtype_ubhotspots", $options)) {
+            if (!$DB->update_record("qtype_ubhotspots", $options)) {
                 $result->error = "Could not update quiz ubhotspots options! (id=$options->id)";
                 return $result;
             }
         } else {
-            if (!insert_record("qtype_ubhotspots", $options)) {
+            if (!$DB->insert_record("qtype_ubhotspots", $options)) {
                 $result->error = "Could not insert quiz ubhotspots options!";
                 return $result;
             }
@@ -128,8 +258,9 @@ class ubhotspots_qtype extends default_questiontype {
      * @param integer $questionid The question being deleted
      * @return boolean to indicate success of failure.
      */
-    function delete_question($questionid) {
-        delete_records("qtype_ubhotspots", "question", $questionid);
+    function delete_question($questionid, $contextid) {
+        global $DB;
+        $DB->delete_records("qtype_ubhotspots", array("question" => $questionid));
         return true;
     }
     
@@ -148,11 +279,11 @@ class ubhotspots_qtype extends default_questiontype {
     }
     
     function save_session_and_responses(&$question, &$state) {
-    
+        global $DB;
         $responses = implode(';',array_keys($state->responses)).':';
         $responses .= implode(';', $state->responses);
     
-        return set_field('question_states', 'answer', $responses, 'id', $state->id);
+        return $DB->set_field('question_states', 'answer', $responses, array('id', $state->id));
     }    
     
     function print_question_formulation_and_controls(&$question, &$state, $cmoptions, $options) {
@@ -208,7 +339,7 @@ class ubhotspots_qtype extends default_questiontype {
     }
     
 
-    function get_all_responses(&$question, &$state) {
+  /*  function get_all_responses(&$question, &$state) {
         $result = new stdClass;
         // TODO, return a link to a php that displays the correct response
         return $result;
@@ -218,7 +349,7 @@ class ubhotspots_qtype extends default_questiontype {
         // TODO, return a link to a php that displays the correct response
         $responses = '';
         return $responses;
-    }
+    } */
     
     /**
      * Check if the user entered coords are inside the correct shape
@@ -278,10 +409,10 @@ class ubhotspots_qtype extends default_questiontype {
      * This is used in question/backuplib.php
      */
     function backup($bf,$preferences,$question,$level=6) {
-
+        global $DB;
         $status = true;
 
-        $ubhotspots = get_records("qtype_ubhotspots","question",$question,"id");
+        $ubhotspots = $DB->get_records("qtype_ubhotspots",array("question" => $question),"id");
         //If there are ubhotspots
         if ($ubhotspots) {
             //Iterate over each ubhotspots
@@ -305,7 +436,7 @@ class ubhotspots_qtype extends default_questiontype {
      * This is used in question/restorelib.php
      */
     function restore($old_question_id,$new_question_id,$info,$restore) {
-
+        global $DB;
         $status = true;
 
         //Get the ubhotspots array
@@ -321,7 +452,7 @@ class ubhotspots_qtype extends default_questiontype {
             $ubhotspot->hseditordata = backup_todb($mul_info['#']['HSEDITORDATA']['0']['#']);                      
 
             //The structure is equal to the db, so insert the question_shortanswer
-            $newid = insert_record ("qtype_ubhotspots",$ubhotspot);
+            $newid = $DB->insert_record ("qtype_ubhotspots",$ubhotspot);
 
             //Do some output
             if (($i+1) % 50 == 0) {
@@ -341,8 +472,16 @@ class ubhotspots_qtype extends default_questiontype {
 
         return $status;        
     }
-}
 
-// Register this question type with the system.
-question_register_questiontype(new ubhotspots_qtype());
-?>
+    public function actual_number_of_questions($question) {
+        // Used for the feature number-of-questions-per-page
+        // to determine the actual number of questions wrapped by this question.
+        // The question type description is not even a question
+        // in itself so it will return ZERO!
+        return 0;
+    }
+
+    public function get_random_guess_score($questiondata) {
+        return null;
+    }
+}

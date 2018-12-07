@@ -1,8 +1,9 @@
 <?php
+defined('MOODLE_INTERNAL') || die();
 
-    $plugin->version  = 2011100604;
-    $plugin->requires = 2007101540;
-    $plugin->maturity = MATURITY_STABLE;
-    $plugin->release = 1.0;
+$plugin->version  = 2013110513;
+$plugin->requires = 2013110500;
 
-?>
+$plugin->component = 'qtype_ubhotspots';
+
+$plugin->maturity  = MATURITY_STABLE;
