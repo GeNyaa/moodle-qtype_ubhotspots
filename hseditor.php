@@ -1,7 +1,7 @@
 <?php
 /**
  * The Hot Spots editor
- *    
+ *
  * @copyright &copy; 2011 Universitat de Barcelona
  * @author <jleyva@cvaconsulting.com>
  * @license http://www.gnu.org/copyleft/gpl.html GNU Public License
@@ -61,7 +61,7 @@ else{
     <script type="text/javascript" src="js/jquery.layout.js"></script>
     <script type="text/javascript" src="js/jquery.ui.js"></script>
     <!-- CDN hosted by Cachefly -->
-    <script src="//tinymce.cachefly.net/4.1/tinymce.min.js"></script>
+    <script src="//cdn.tinymce.com/4/tinymce.min.js"></script>
     <!--[if IE]><script type="text/javascript" src="js/excanvas.js"></script><![endif]-->
     <script language="javascript">
     var canvasWidth = 400;
@@ -524,13 +524,13 @@ else{
 <div class="ui-layout-center">
     <div id="maincontainer">
         <div id="canvas1" style="left: 0px; top: 0px; float: left">
-        
-        </div>        
-    </div> 
+
+        </div>
+    </div>
 </div>
 <div class="ui-layout-east">
 <div id="spots">
-    
+
 </div>
 <button id="badd"><?php echo get_string('jsadd','qtype_ubhotspots'); ?></button>
 <br /><br /><br />
@@ -538,7 +538,7 @@ else{
     <button id="bsave"><?php echo get_string('jssave','qtype_ubhotspots'); ?></button>
     <button id="bclose"><?php echo get_string('jscancel','qtype_ubhotspots'); ?></button>
     </div>
-<div id="debugdiv">    
+<div id="debugdiv">
 </div>
 </div>
 
