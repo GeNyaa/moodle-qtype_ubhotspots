@@ -4,6 +4,8 @@ Originally by:
 Developed by Moodle Partner CV&A Consulting,
 funding Universitat de Barcelona (http://www.ub.edu)
 
+Updated the original plugin to work with Moodle 3.5+.
+
 ## Installation
 
 Download and unzip the file. Rename the resulting directory to ubhotspots and move it to
